@@ -262,7 +262,7 @@ def get_home_path():
 
 
 def get_work_path():
-    return os.path.join(get_home_path(), '.homesick')
+    return os.path.join(get_home_path(), '.dotfiles')
 
 
 def get_castle_path(name):
