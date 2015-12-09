@@ -35,13 +35,19 @@ def main(argv):
 
         command_list()
 
+    elif cmd == 'track':
+        if len(argv) != 4:
+            raise 'Use dotfiles track <castle> <file inside home>'
+
+        command_track(argv[2], argv[3])
+
     else:
         print('help')
 
 
 def command_list():
     for name in list_castle_names():
-        castle = to_castle_path(name)
+        castle = get_castle_path(name)
         repo = git.Repo(castle)
         print(name, '=>', repo.remotes['origin'].url)
 
@@ -52,7 +58,7 @@ def command_add(git_url):
 
     name = git_url[git_url.rfind('/') + 1: git_url.rfind('.')]
 
-    castle = to_castle_path(name)
+    castle = get_castle_path(name)
 
     if os.path.exists(castle):
         print(name, 'was already cloned')
@@ -68,25 +74,24 @@ def command_add(git_url):
 
 
 def command_remove(name):
-    castle = to_castle_path(name)
+    castle = get_castle_path(name)
 
     if not os.path.exists(castle):
-        print(name, 'is not cloned')
+        print('Castle', name, 'does not exist')
         return
 
-    repo = git.Repo(castle)
-    has_changes = len(repo.untracked_files) > 0 or len(repo.head.commit.diff(None)) > 0
-    if has_changes:
-        yn = input(name + ' has uncommitted changes. Are you sure you want to remove it? [yn] ').strip()
-        if yn != 'y':
-            return
+    if os.path.exists(os.path.join(castle, '.git')):
+        repo = git.Repo(castle)
+        has_changes = len(repo.untracked_files) > 0 or len(repo.head.commit.diff(None)) > 0
+        if has_changes:
+            yn = input(name + ' has uncommitted changes. Are you sure you want to remove it? [yn] ').strip()
+            if yn != 'y':
+                return
 
     print('Removing links from', name, '...')
     unlink_files(castle, '   ')
 
     print('Removing clone ...')
-    if os.path.exists(castle):
-        shutil.rmtree(castle, ignore_errors=True, onerror=onerror)
     if os.path.exists(castle):
         shutil.rmtree(castle, onerror=onerror)
 
@@ -94,7 +99,7 @@ def command_remove(name):
 
 
 def command_sync(name):
-    if name == None:
+    if name is None:
         names = list_castle_names()
     else:
         names = [name]
@@ -102,7 +107,11 @@ def command_sync(name):
     for name in names:
         print('Syncing', name, '...')
 
-        castle = to_castle_path(name)
+        castle = get_castle_path(name)
+
+        if not os.path.exists(castle):
+            print('Castle', name, 'does not exist')
+            continue
 
         repo = git.Repo(castle)
 
@@ -139,23 +148,80 @@ def command_sync(name):
     print('Done')
 
 
+def command_track(name, file):
+    file = os.path.realpath(file)
+
+    if not os.path.exists(file):
+        print(file, 'does not exist')
+        return
+
+    if not os.path.isfile(file):
+        print(file, ' have to be a file')
+        return
+
+    castle = get_castle_path(name)
+
+    if not os.path.exists(castle):
+        print('Castle', name, 'does not exist')
+        return
+
+    home = get_home_path()
+    work = get_work_path()
+
+    if not is_inside(file, home):
+        print(file, 'have to be inside home folder')
+        return
+
+    if is_inside(file, work):
+        print(file, 'can not be inside work folder (', work, ')')
+        return
+
+    rel = os.path.relpath(file, home)
+
+    orig = os.path.join(home, file)
+    dest = os.path.join(castle, 'home', rel)
+
+    if os.path.exists(dest):
+        print('The file', rel, 'already exists inside', name)
+        return
+
+    link_file(orig, dest)
+    print('Done')
+
+
+def is_inside(file, path):
+    if not file.startswith(path):
+        return False
+
+    return not os.path.relpath(file, path).startswith(os.pardir)
+
+
 def link_files(castle, prefix=''):
     path = os.path.join(castle, 'home')
 
     if not os.path.exists(path):
         return
 
-    files = list_dotfiles(path)
+    files = list_all_files(path)
+    home = get_home_path()
 
     for file in files:
         orig = os.path.join(path, file)
-        dest = os.path.join(os.path.expanduser('~'), file)
+        dest = os.path.join(home, file)
 
         if os.path.exists(dest):
             print(prefix + 'Skipping file', file, 'because it already exists')
             continue
 
-        os.link(orig, dest)
+        link_file(orig, dest)
+
+
+def link_file(orig, dest):
+    dest_dir = os.path.dirname(dest)
+    if not os.path.exists(dest_dir):
+        os.makedirs(dest_dir)
+
+    os.link(orig, dest)
 
 
 def unlink_files(castle, prefix=''):
@@ -164,11 +230,12 @@ def unlink_files(castle, prefix=''):
     if not os.path.exists(path):
         return
 
-    files = list_dotfiles(path)
+    files = list_all_files(path)
+    home = get_home_path()
 
     for file in files:
         orig = os.path.join(path, file)
-        dest = os.path.join(os.path.expanduser('~'), file)
+        dest = os.path.join(home, file)
 
         if not os.path.exists(dest):
             print(prefix + 'Skipping file', file, 'because it isn\'t linked to this castle')
@@ -181,17 +248,25 @@ def unlink_files(castle, prefix=''):
         os.unlink(dest)
 
 
-def list_dotfiles(path):
+def list_all_files(path):
     return [os.path.relpath(os.path.join(r, f), path) for r, ds, fs in os.walk(path) for f in fs]
 
 
 def list_castle_names():
-    home = os.path.join(os.path.expanduser('~'), '.homesick')
-    return [f for f in os.listdir(home) if os.path.isdir(os.path.join(home, f))]
+    work = get_work_path()
+    return [f for f in os.listdir(work) if os.path.isdir(os.path.join(work, f))]
 
 
-def to_castle_path(name):
-    return os.path.join(os.path.expanduser('~'), '.homesick', name)
+def get_home_path():
+    return os.path.expanduser('~')
+
+
+def get_work_path():
+    return os.path.join(get_home_path(), '.homesick')
+
+
+def get_castle_path(name):
+    return os.path.join(get_work_path(), name)
 
 
 class Progress(git.RemoteProgress):
