@@ -29,8 +29,21 @@ def main(argv):
 
         command_sync(argv[2] if len(argv) > 2 else None)
 
+    elif cmd == 'list':
+        if len(argv) != 2:
+            raise 'Use dotfiles list'
+
+        command_list()
+
     else:
         print('help')
+
+
+def command_list():
+    for name in list_castle_names():
+        castle = to_castle_path(name)
+        repo = git.Repo(castle)
+        print(name, '=>', repo.remotes['origin'].url)
 
 
 def command_add(git_url):
@@ -82,8 +95,7 @@ def command_remove(name):
 
 def command_sync(name):
     if name == None:
-        home = os.path.join(os.path.expanduser('~'), '.homesick')
-        names = [f for f in os.listdir(home) if os.path.isdir(os.path.join(home, f))]
+        names = list_castle_names()
     else:
         names = [name]
 
@@ -133,7 +145,7 @@ def link_files(castle, prefix=''):
     if not os.path.exists(path):
         return
 
-    files = [os.path.relpath(os.path.join(r, f), path) for r, ds, fs in os.walk(path) for f in fs]
+    files = list_dotfiles(path)
 
     for file in files:
         orig = os.path.join(path, file)
@@ -152,7 +164,7 @@ def unlink_files(castle, prefix=''):
     if not os.path.exists(path):
         return
 
-    files = [os.path.relpath(os.path.join(r, f), path) for r, ds, fs in os.walk(path) for f in fs]
+    files = list_dotfiles(path)
 
     for file in files:
         orig = os.path.join(path, file)
@@ -167,6 +179,15 @@ def unlink_files(castle, prefix=''):
             continue
 
         os.unlink(dest)
+
+
+def list_dotfiles(path):
+    return [os.path.relpath(os.path.join(r, f), path) for r, ds, fs in os.walk(path) for f in fs]
+
+
+def list_castle_names():
+    home = os.path.join(os.path.expanduser('~'), '.homesick')
+    return [f for f in os.listdir(home) if os.path.isdir(os.path.join(home, f))]
 
 
 def to_castle_path(name):
