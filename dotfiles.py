@@ -281,6 +281,7 @@ class Progress(git.RemoteProgress):
         print(self.prefix + self._cur_line)
 
 
+# http://stackoverflow.com/a/2656405
 def onerror(func, path, exc_info):
     """
     Error handler for ``shutil.rmtree``.
