@@ -5,7 +5,7 @@ import git
 import argparse
 
 
-def main(argv):
+def main():
     parser = argparse.ArgumentParser()
 
     subparsers = parser.add_subparsers(dest='cmd', title='commands')
@@ -298,7 +298,7 @@ def get_home_path():
 
 
 def get_work_path():
-    return os.path.join(get_home_path(), '.dotfiles')
+    return os.path.join(get_home_path(), '.dotcastles')
 
 
 def get_castle_path(name):
@@ -347,4 +347,4 @@ def onerror(func, path, exc_info):
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main()
