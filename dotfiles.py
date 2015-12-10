@@ -2,51 +2,60 @@ import sys
 import os
 import shutil
 import git
+import argparse
 
 
 def main(argv):
-    if len(argv) < 2:
-        print('help')
-        return
+    parser = argparse.ArgumentParser()
 
-    cmd = argv[1]
+    subparsers = parser.add_subparsers(dest='cmd', title='commands')
 
-    if cmd == 'add':
-        if len(argv) != 3:
-            raise 'Use dotfiles add <git repo>'
+    cmd = subparsers.add_parser('list', description='list all castles and their git urls')
 
-        command_add(argv[2])
+    cmd = subparsers.add_parser('add', description='add dotfiles from a git repository')
+    cmd.add_argument('url', help='git url or, if from github, username/repository')
 
-    elif cmd == 'rem':
-        if len(argv) != 3:
-            raise 'Use dotfiles rem <castle>'
+    cmd = subparsers.add_parser('rem', description='remove dotfiles from a git repository previously added')
+    cmd.add_argument('castle', help='name of the castle')
 
-        command_remove(argv[2])
+    cmd = subparsers.add_parser('sync', description='fetch changes from remote repository and send local changes')
+    cmd.add_argument('castle', nargs='?', default='', help='name of the castle (leave empty for all)')
 
-    elif cmd == 'sync':
-        if len(argv) > 3:
-            raise 'Use dotfiles sync <castle>?'
+    cmd = subparsers.add_parser('track', description='add one more file to a castle')
+    cmd.add_argument('castle', help='name of the castle')
+    cmd.add_argument('file', type=argparse.FileType('r'), help='file name (must be inside home folder)')
 
-        command_sync(argv[2] if len(argv) > 2 else None)
+    parser.add_argument('--version', action='version', version='%(prog)s 0.1')
 
-    elif cmd == 'list':
-        if len(argv) != 2:
-            raise 'Use dotfiles list'
+    if len(sys.argv) < 2:
+        sys.argv.append('--help')
 
+    args = parser.parse_args()
+
+    if args.cmd == 'add':
+        command_add(args.url)
+
+    elif args.cmd == 'rem':
+        command_remove(args.castle)
+
+    elif args.cmd == 'sync':
+        command_sync(args.castle)
+
+    elif args.cmd == 'list':
         command_list()
 
-    elif cmd == 'track':
-        if len(argv) != 4:
-            raise 'Use dotfiles track <castle> <file inside home>'
-
-        command_track(argv[2], argv[3])
-
-    else:
-        print('help')
+    elif args.cmd == 'track':
+        command_track(args.castle, args.file)
 
 
 def command_list():
-    for name in list_castle_names():
+    names = list_castle_names()
+
+    if not names:
+        print('No castles were added')
+        return
+
+    for name in names:
         castle = get_castle_path(name)
         repo = git.Repo(castle)
         print(name, '=>', repo.remotes['origin'].url)
@@ -64,11 +73,13 @@ def command_add(git_url):
         print(name, 'was already cloned')
         return
 
-    print('Cloning', git_url, '...')
-    git.Repo.clone_from(git_url, castle, progress=Progress('   '))
+    print('Creating castle', name, '...')
 
-    print('Linking files from', name, '...')
-    link_files(castle, '   ')
+    print('   Cloning', git_url, '...')
+    git.Repo.clone_from(git_url, castle, progress=Progress('      '))
+
+    print('   Linking files from', name, '...')
+    link_files(castle, '      ')
 
     print('Done')
 
@@ -84,12 +95,16 @@ def command_remove(name):
         repo = git.Repo(castle)
         has_changes = len(repo.untracked_files) > 0 or len(repo.head.commit.diff(None)) > 0
         if has_changes:
-            yn = input(name + ' has uncommitted changes. Are you sure you want to remove it? [yn] ').strip()
-            if yn != 'y':
+            print(name + ' has uncommitted changes:')
+            print_changes(repo, '   ')
+            yn = input('Are you sure you want to remove it? [yN] ').strip()
+            if yn.lower() != 'y':
                 return
 
-    print('Removing links from', name, '...')
-    unlink_files(castle, '   ')
+    yn = input('Do you want to keep the dotfiles in your home folder? [yN] ').strip()
+    if yn.lower() != 'y':
+        print('Removing links from', name, '...')
+        unlink_files(castle, '   ')
 
     print('Removing clone ...')
     if os.path.exists(castle):
@@ -99,10 +114,14 @@ def command_remove(name):
 
 
 def command_sync(name):
-    if name is None:
+    if not name:
         names = list_castle_names()
     else:
         names = [name]
+
+    if not names:
+        print('No castles were added')
+        return
 
     for name in names:
         print('Syncing', name, '...')
@@ -130,6 +149,8 @@ def command_sync(name):
             print('   Popping stash changes ...')
             repo.git.stash('pop')
 
+            print('   Changes:')
+            print_changes(repo, '      ')
             message = input('   Commit message (leave empty to skip): ').strip()
 
             if len(message) > 0:
@@ -149,6 +170,12 @@ def command_sync(name):
 
 
 def command_track(name, file):
+    castle = get_castle_path(name)
+
+    if not os.path.exists(castle):
+        print('Castle', name, 'does not exist')
+        return
+
     file = os.path.realpath(file)
 
     if not os.path.exists(file):
@@ -156,13 +183,7 @@ def command_track(name, file):
         return
 
     if not os.path.isfile(file):
-        print(file, ' have to be a file')
-        return
-
-    castle = get_castle_path(name)
-
-    if not os.path.exists(castle):
-        print('Castle', name, 'does not exist')
+        print(file, 'have to be a file')
         return
 
     home = get_home_path()
@@ -238,11 +259,11 @@ def unlink_files(castle, prefix=''):
         dest = os.path.join(home, file)
 
         if not os.path.exists(dest):
-            print(prefix + 'Skipping file', file, 'because it isn\'t linked to this castle')
+            print(prefix + 'Skipping file', file, 'because it is not linked to this castle')
             continue
 
         if not os.path.samefile(dest, orig):
-            print(prefix + 'Skipping file', file, 'because it isn\'t linked to this castle')
+            print(prefix + 'Skipping file', file, 'because it is not linked to this castle')
             continue
 
         os.unlink(dest)
@@ -267,6 +288,14 @@ def get_work_path():
 
 def get_castle_path(name):
     return os.path.join(get_work_path(), name)
+
+
+def print_changes(repo, prefix):
+    for f in repo.untracked_files:
+        print(prefix + 'added', f)
+
+    for d in repo.head.commit.diff(None):
+        print(prefix + 'modified', d.b_path)
 
 
 class Progress(git.RemoteProgress):
