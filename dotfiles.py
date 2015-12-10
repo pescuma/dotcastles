@@ -268,9 +268,24 @@ def unlink_files(castle, prefix=''):
 
         os.unlink(dest)
 
+    folders = list_all_sub_folders(path)
+    folders.sort(key=lambda s: -len(s))
+
+    for folder in folders:
+        dest = os.path.join(home, folder)
+
+        if not os.path.isdir(dest) or os.listdir(dest):
+            continue
+
+        os.rmdir(dest)
+
 
 def list_all_files(path):
     return [os.path.relpath(os.path.join(r, f), path) for r, ds, fs in os.walk(path) for f in fs]
+
+
+def list_all_sub_folders(path):
+    return [os.path.relpath(os.path.join(r, d), path) for r, ds, fs in os.walk(path) for d in ds]
 
 
 def list_castle_names():
