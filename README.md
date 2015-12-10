@@ -1,2 +1,3 @@
 # dotcastles
-Manage your dotfiles. Inspired by homesick. Works in windows.
+
+Manage your dotfiles. Inspired by homesick. Works in Windows.

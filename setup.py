@@ -1,19 +1,21 @@
-from distutils.core import setup
+from setuptools import setup
 
 setup(
     name='dotcastles',
     packages=['dotcastles'],
-    version='0.1',
-    description='Shares your dotcastles through git',
+    version='0.1.0',
+    description='Shares your dotfiles through git',
     author='Ricardo Pescuma Domenecci',
     author_email='ricardo@pescuma.org',
+    license='GPL',
     url='https://github.com/pescuma/dotcastles',
-    download_url='https://github.com/pescuma/dotcastles/tarball/v0.1',
-    keywords=['dotcastles'],
+    download_url='https://github.com/pescuma/dotcastles/tarball/v0.1.0',
+    keywords=['dotfiles'],
     classifiers=[],
     entry_points={
         'console_scripts': [
-            'dotcastles = dotcastles:main'
+            'dotcastles=dotcastles:main'
         ]
     },
+    install_requires=['gitpython'],
 )
