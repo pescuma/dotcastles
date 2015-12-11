@@ -45,7 +45,7 @@ def main():
         command_list()
 
     elif args.cmd == 'track':
-        command_track(args.castle, args.file)
+        command_track(args.castle, args.file.name)
 
 
 def command_list():
@@ -211,10 +211,10 @@ def command_track(name, file):
 
 
 def is_inside(file, path):
-    if not file.startswith(path):
-        return False
-
-    return not os.path.relpath(file, path).startswith(os.pardir)
+    relative = os.path.relpath(os.path.realpath(file),
+                               os.path.realpath(path))
+    return not (relative == os.pardir
+                or relative.startswith(os.pardir + os.sep))
 
 
 def link_files(castle, prefix=''):
