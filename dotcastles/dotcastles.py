@@ -158,7 +158,7 @@ def command_sync(name):
                 repo.git.add(u=True)
 
                 print('   Committing ...')
-                repo.git.commit(m=message)
+                repo.index.commit(message)
 
                 print('   Pushing ...')
                 repo.remotes['origin'].push(progress=Progress('      '))
