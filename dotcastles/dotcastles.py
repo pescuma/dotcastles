@@ -154,10 +154,8 @@ def command_sync(name):
             message = input('   Commit message (leave empty to skip): ').strip()
 
             if len(message) > 0:
-                print('   Adding files ...')
-                repo.git.add(u=True)
-
                 print('   Committing ...')
+                repo.git.add(A=True)
                 repo.index.commit(message)
 
                 print('   Pushing ...')
