@@ -26,7 +26,7 @@ def main():
     cmd.add_argument('castle', help='name of the castle')
     cmd.add_argument('file', type=argparse.FileType('r'), help='file name (must be inside home folder)')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 0.1.5')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.1.6')
 
     if len(sys.argv) < 2:
         sys.argv.append('--help')
@@ -155,7 +155,9 @@ def command_sync(name):
             repo.git.stash('save', '-u')
 
         print('   Pulling ...')
-        repo.remotes['origin'].pull(progress=Progress('      '))
+        progress = Progress('      ')
+        repo.remotes['origin'].pull(progress=progress)
+        progress.finish()
 
         if has_changes:
             print('   Popping stash changes ...')
@@ -171,7 +173,9 @@ def command_sync(name):
                 repo.index.commit(message)
 
                 print('   Pushing ...')
-                repo.remotes['origin'].push(progress=Progress('      '))
+                progress = Progress('      ')
+                repo.remotes['origin'].push(progress=progress)
+                progress.finish()
 
         print('   Linking files ...')
         link_files(castle, '      ')
