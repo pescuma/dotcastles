@@ -1,3 +1,4 @@
+import gc
 import sys
 import os
 import shutil
@@ -25,7 +26,7 @@ def main():
     cmd.add_argument('castle', help='name of the castle')
     cmd.add_argument('file', type=argparse.FileType('r'), help='file name (must be inside home folder)')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 0.1.3')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.1.4')
 
     if len(sys.argv) < 2:
         sys.argv.append('--help')
@@ -62,10 +63,17 @@ def command_list():
 
 
 def command_add(git_url):
-    if git_url.find('.') == -1:
+    if not git_url.startswith('http'):
         git_url = 'https://github.com/' + git_url + '.git'
 
+    elif git_url.startswith('https://github.com/') and not git_url.endswith('.git'):
+        git_url = git_url + '.git'
+
     name = git_url[git_url.rfind('/') + 1: git_url.rfind('.')]
+
+    if name.isspace():
+        print('Could not guess repository name')
+        return
 
     castle = get_castle_path(name)
 
@@ -76,7 +84,9 @@ def command_add(git_url):
     print('Creating castle', name, '...')
 
     print('   Cloning', git_url, '...')
-    git.Repo.clone_from(git_url, castle, progress=Progress('      '))
+    progress = Progress('      ')
+    git.Repo.clone_from(git_url, castle, progress=progress)
+    progress.finish()
 
     print('   Linking files from', name, '...')
     link_files(castle, '      ')
@@ -97,17 +107,19 @@ def command_remove(name):
         if has_changes:
             print(name + ' has uncommitted changes:')
             print_changes(repo, '   ')
-            yn = input('Are you sure you want to remove it? [yN] ').strip()
-            if yn.lower() != 'y':
+            yn = query_yes_no('Are you sure you want to remove it?', 'no')
+            if not yn:
                 return
 
-    yn = input('Do you want to keep the dotfiles in your home folder? [yN] ').strip()
-    if yn.lower() != 'y':
+    yn = query_yes_no('Do you want to keep the dotfiles in your home folder?', 'no')
+    if not yn:
         print('Removing links from', name, '...')
         unlink_files(castle, '   ')
 
     print('Removing clone ...')
     if os.path.exists(castle):
+        gc.collect()
+        repo.git.clear_cache()
         shutil.rmtree(castle, onerror=onerror)
 
     print('Done')
@@ -229,8 +241,12 @@ def link_files(castle, prefix=''):
         dest = os.path.join(home, file)
 
         if os.path.exists(dest):
-            print(prefix + 'Skipping file', file, 'because it already exists')
-            continue
+            overwrite = query_yes_no(prefix + 'File ' + dest + ' already exists. Overwrite?', 'no')
+            if overwrite:
+                os.remove(dest)
+            else:
+                print(prefix + '   Skipping file ', dest)
+                continue
 
         link_file(orig, dest)
 
@@ -315,12 +331,23 @@ class Progress(git.RemoteProgress):
     def __init__(self, prefix=''):
         super().__init__()
         self.prefix = prefix
+        self.cols = shutil.get_terminal_size().columns
+
+    def print(self, line):
+        text = self.prefix + line
+        if len(text) > self.cols - 1:
+            text = text[0: self.cols - 4] + '...'
+        text = text.ljust(self.cols - 1)
+        print(text, end='\r')
 
     def line_dropped(self, line):
-        print(self.prefix + line)
+        self.print(line)
 
-    def update(self, *args):
-        print(self.prefix + self._cur_line)
+    def update(self, op_code, cur_count, max_count=None, message=''):
+        self.print(self._cur_line)
+
+    def finish(self):
+        self.print('')
 
 
 # http://stackoverflow.com/a/2656405
@@ -342,6 +369,40 @@ def onerror(func, path, exc_info):
         func(path)
     else:
         raise
+
+
+# https://stackoverflow.com/a/3041990
+def query_yes_no(question, default="yes"):
+    """Ask a yes/no question via input() and return their answer.
+
+    "question" is a string that is presented to the user.
+    "default" is the presumed answer if the user just hits <Enter>.
+        It must be "yes" (the default), "no" or None (meaning
+        an answer is required of the user).
+
+    The "answer" return value is True for "yes" or False for "no".
+    """
+    valid = {"yes": True, "y": True, "ye": True,
+             "no": False, "n": False}
+    if default is None:
+        prompt = " [y/n] "
+    elif default == "yes":
+        prompt = " [Y/n] "
+    elif default == "no":
+        prompt = " [y/N] "
+    else:
+        raise ValueError("invalid default answer: '%s'" % default)
+
+    while True:
+        sys.stdout.write(question + prompt)
+        choice = input().lower()
+        if default is not None and choice == '':
+            return valid[default]
+        elif choice in valid:
+            return valid[choice]
+        else:
+            sys.stdout.write("Please respond with 'yes' or 'no' "
+                             "(or 'y' or 'n').\n")
 
 
 if __name__ == '__main__':
