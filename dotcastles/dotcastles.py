@@ -26,7 +26,7 @@ def main():
     cmd.add_argument('castle', help='name of the castle')
     cmd.add_argument('file', type=argparse.FileType('r'), help='file name (must be inside home folder)')
 
-    parser.add_argument('--version', action='version', version='%(prog)s 0.1.4')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.1.5')
 
     if len(sys.argv) < 2:
         sys.argv.append('--help')
